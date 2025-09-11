@@ -52,6 +52,35 @@ query_tag = {"origin": "sf_sit", "name": "mcp_server"}
 logger = logging.getLogger(server_name)
 
 
+DEFAULT_SERVICE_CONFIG = """
+other_services: # Set desired tool groups to True to enable tools for that group
+  object_manager: True # Perform basic operations against Snowflake's most common objects such as creation, dropping, updating, and more.
+  query_manager: True # Run LLM-generated SQL managed by user-configured permissions.
+  semantic_manager: True # Discover and query Snowflake Semantic Views and their components.
+sql_statement_permissions: # List SQL statements to explicitly allow (True) or disallow (False).
+  # - All: True # To allow everything, uncomment and set All: True.
+  - Alter: True
+  - Command: True
+  - Comment: True
+  - Commit: True
+  - Create: True
+  - Delete: True
+  - Describe: True
+  - Drop: True
+  - Insert: True
+  - Merge: True
+  - Rollback: True
+  - Select: True
+  - Transaction: True
+  - TruncateTable: True
+  # - Unknown: True # To allow unknown or unmapped statement types, uncomment and set Unknown: True.
+  - Update: True
+  - Use: True
+"""
+SERVICE_CONFIG_VALUE = os.getenv("SERVICE_CONFIG_YAML", DEFAULT_SERVICE_CONFIG)
+with open("/tmp/snowflake_tools_config.yaml", "w") as file:
+    file.write(SERVICE_CONFIG_VALUE)
+
 class SnowflakeService:
     """
     Snowflake service configuration and management.
@@ -101,11 +130,13 @@ class SnowflakeService:
         connection_params: dict,
     ):
         if service_config_file is None:
-            raise ValueError(
-                "service_config_file cannot be None. Please provide a path to the service configuration file."
-            )
+            # raise ValueError(
+            #     "service_config_file cannot be None. Please provide a path to the service configuration file."
+            # )
+            self.service_config_file = "/tmp/snowflake_tools_config.yaml"
 
-        self.service_config_file = str(Path(service_config_file).expanduser().resolve())
+        else:
+            self.service_config_file = str(Path(service_config_file).expanduser().resolve())
         self.config_path_uri = Path(self.service_config_file).as_uri()
         self.transport = cast(Literal["stdio", "sse", "streamable-http"], transport)
         self.connection_params = connection_params
