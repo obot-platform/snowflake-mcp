@@ -77,7 +77,11 @@ sql_statement_permissions: # List SQL statements to explicitly allow (True) or d
   - Update: True
   - Use: True
 """
-SERVICE_CONFIG_VALUE = os.getenv("SERVICE_CONFIG_YAML", DEFAULT_SERVICE_CONFIG)
+SERVICE_CONFIG_VALUE = os.getenv("SERVICE_CONFIG_YAML")
+if SERVICE_CONFIG_VALUE is None:
+    SERVICE_CONFIG_VALUE = DEFAULT_SERVICE_CONFIG
+else:
+    SERVICE_CONFIG_VALUE = SERVICE_CONFIG_VALUE.replace('\\n', '\n')
 with open("/tmp/snowflake_tools_config.yaml", "w") as file:
     file.write(SERVICE_CONFIG_VALUE)
 
