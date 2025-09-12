@@ -77,13 +77,12 @@ sql_statement_permissions: # List SQL statements to explicitly allow (True) or d
   - Update: True
   - Use: True
 """
-SERVICE_CONFIG_VALUE = os.getenv("SERVICE_CONFIG_YAML")
-if SERVICE_CONFIG_VALUE is None:
-    SERVICE_CONFIG_VALUE = DEFAULT_SERVICE_CONFIG
-else:
-    SERVICE_CONFIG_VALUE = SERVICE_CONFIG_VALUE.replace('\\n', '\n')
-with open("/tmp/snowflake_tools_config.yaml", "w") as file:
-    file.write(SERVICE_CONFIG_VALUE)
+SERVICE_CONFIG_YAML = os.getenv("SERVICE_CONFIG_YAML")
+if SERVICE_CONFIG_YAML is None:
+    with open("/tmp/snowflake_tools_config.yaml", "w") as file:
+        file.write(DEFAULT_SERVICE_CONFIG)
+    SERVICE_CONFIG_YAML = "/tmp/snowflake_tools_config.yaml"
+
 
 class SnowflakeService:
     """
@@ -133,7 +132,7 @@ class SnowflakeService:
         transport: str,
         connection_params: dict,
     ):
-        service_config_file = "/tmp/snowflake_tools_config.yaml"
+        service_config_file = SERVICE_CONFIG_YAML
         self.service_config_file = str(Path(service_config_file).expanduser().resolve())
         self.config_path_uri = Path(self.service_config_file).as_uri()
         self.transport = cast(Literal["stdio", "sse", "streamable-http"], transport)
