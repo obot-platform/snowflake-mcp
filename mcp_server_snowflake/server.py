@@ -50,8 +50,8 @@ tag_minor_version = 1
 query_tag = {"origin": "sf_sit", "name": "mcp_server"}
 
 # Server version for tracking deployments
-SERVER_VERSION = "1.2.1-connection-fix"
-BUILD_DATE = "2025-09-12"
+SERVER_VERSION = "1.2.2-k8s-fixes"
+BUILD_DATE = "2025-09-13"
 
 logger = logging.getLogger(server_name)
 
@@ -226,6 +226,19 @@ class SnowflakeService:
             }
         else:
             # For external environments, we need to use the connection token
+            # Ensure connection and REST token are available
+            if self.connection is None:
+                logger.warning("Connection is None, attempting to recreate for REST API")
+                self._recreate_persistent_connection()
+                
+            if self.connection.rest is None:
+                logger.error("Connection REST interface is None - cannot authenticate REST API calls")
+                raise Exception("Connection REST interface not available for authentication")
+                
+            if not hasattr(self.connection.rest, 'token') or self.connection.rest.token is None:
+                logger.error("Connection REST token is None - cannot authenticate REST API calls")
+                raise Exception("Connection REST token not available for authentication")
+                
             return {
                 "Accept": "application/json, text/event-stream",
                 "Content-Type": "application/json",
@@ -340,9 +353,19 @@ class SnowflakeService:
             return False
             
         try:
+            # Test basic SQL execution
             with self.connection.cursor() as cur:
                 cur.execute("SELECT 1")
                 cur.fetchone()
+                
+            # For external environments, also check REST token availability
+            if not self._is_spcs_container:
+                if (self.connection.rest is None or 
+                    not hasattr(self.connection.rest, 'token') or 
+                    self.connection.rest.token is None):
+                    logger.warning("Connection REST token not available")
+                    return False
+                    
             return True
         except Exception as e:
             logger.warning(f"Connection health check failed: {e}")
