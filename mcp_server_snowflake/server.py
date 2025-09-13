@@ -50,7 +50,7 @@ tag_minor_version = 1
 query_tag = {"origin": "sf_sit", "name": "mcp_server"}
 
 # Server version for tracking deployments
-SERVER_VERSION = "1.2.6-simplified-rest-auth"
+SERVER_VERSION = "1.3.0-k8s-connection-fix"
 BUILD_DATE = "2025-09-13"
 
 logger = logging.getLogger(server_name)
@@ -230,27 +230,17 @@ class SnowflakeService:
                 logger.info("Connection is None or unhealthy, recreating for REST API")
                 self._recreate_persistent_connection()
             
-            # Try to access the REST token directly (original working approach)
-            try:
-                if (self.connection.rest is not None and 
-                    hasattr(self.connection.rest, 'token') and 
-                    self.connection.rest.token is not None):
-                    return {
-                        "Accept": "application/json, text/event-stream",
-                        "Content-Type": "application/json",
-                        "Authorization": f'Snowflake Token="{self.connection.rest.token}"',
-                    }
-                else:
-                    # REST interface not available - this indicates an authentication method issue
-                    auth_method = self.connection_params.get('authenticator', 'snowflake')
-                    raise Exception(
-                        f"REST API interface not available with authenticator '{auth_method}'. "
-                        f"This authentication method may not support REST API access. "
-                        f"Consider using 'oauth' authentication for full REST API support."
-                    )
-            except Exception as e:
-                logger.error(f"Error accessing REST token: {e}")
-                raise
+            # Access the REST token with basic null-safety check
+            if (self.connection.rest is not None and 
+                hasattr(self.connection.rest, 'token') and 
+                self.connection.rest.token is not None):
+                return {
+                    "Accept": "application/json, text/event-stream",
+                    "Content-Type": "application/json",
+                    "Authorization": f'Snowflake Token="{self.connection.rest.token}"',
+                }
+            else:
+                raise Exception("REST API interface not available - connection may not support REST API access")
 
     def get_api_host(self) -> str:
         """
