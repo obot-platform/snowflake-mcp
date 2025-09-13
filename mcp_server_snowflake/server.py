@@ -323,6 +323,48 @@ class SnowflakeService:
             logger.error(f"Error establishing persistent Snowflake connection: {e}")
             raise
 
+    def _is_connection_healthy(self) -> bool:
+        """
+        Check if the current connection is healthy and can execute queries.
+        
+        Returns
+        -------
+        bool
+            True if connection is healthy, False otherwise
+        """
+        if self.connection is None:
+            return False
+            
+        try:
+            with self.connection.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+            return True
+        except Exception as e:
+            logger.warning(f"Connection health check failed: {e}")
+            return False
+
+    def _recreate_persistent_connection(self) -> None:
+        """
+        Recreate the persistent connection.
+        
+        This method should be called when the current connection is unhealthy
+        or has been closed unexpectedly.
+        """
+        try:
+            if self.connection:
+                try:
+                    self.connection.close()
+                except Exception:
+                    pass  # Ignore errors when closing unhealthy connection
+                    
+            logger.info("Recreating persistent connection...")
+            self.connection = self._get_persistent_connection()
+            self.root = Root(self.connection)
+        except Exception as e:
+            logger.error(f"Error recreating persistent connection: {e}")
+            raise
+
     @contextmanager
     def get_connection(
         self,
@@ -358,28 +400,9 @@ class SnowflakeService:
         """
 
         try:
-            if self.connection is None:
-                # Get connection parameters based on environment
-                if self._is_spcs_container:
-                    logger.info("Using SPCS container OAuth authentication")
-                    connection_params = {
-                        "host": os.getenv("SNOWFLAKE_HOST"),
-                        "account": os.getenv("SNOWFLAKE_ACCOUNT"),
-                        "token": get_spcs_container_token(),
-                        "authenticator": "oauth",
-                    }
-                    connection_params = {
-                        k: v for k, v in connection_params.items() if v is not None
-                    }
-                else:
-                    logger.info("Using external authentication")
-                    connection_params = self.connection_params.copy()
-
-                self.connection = connect(
-                    **connection_params,
-                    session_parameters=session_parameters,
-                    client_session_keep_alive=False,
-                )
+            if self.connection is None or not self._is_connection_healthy():
+                logger.info("Creating new connection (previous connection was None or unhealthy)")
+                self._recreate_persistent_connection()
 
             cursor = (
                 self.connection.cursor(DictCursor)

@@ -138,7 +138,7 @@ def list_objects(
         else:
             return f"No matching {object_name} found."
     except Exception as e:
-        raise SnowflakeException(tool="list_semantic_views", message=e)
+        raise SnowflakeException(tool="list_objects", message=e)
 
 
 def parse_object(target_object: Any, obj_type: supported_objects):
