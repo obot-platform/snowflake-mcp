@@ -50,7 +50,7 @@ tag_minor_version = 1
 query_tag = {"origin": "sf_sit", "name": "mcp_server"}
 
 # Server version for tracking deployments
-SERVER_VERSION = "1.2.4-k8s-rest-timing-fix"
+SERVER_VERSION = "1.2.6-simplified-rest-auth"
 BUILD_DATE = "2025-09-13"
 
 logger = logging.getLogger(server_name)
@@ -225,54 +225,32 @@ class SnowflakeService:
                 "Accept": "application/json, text/event-stream",
             }
         else:
-            # For external environments, we need to use the connection token
-            # Ensure connection is available
-            if self.connection is None:
-                logger.warning("Connection is None, attempting to recreate for REST API")
+            # For external environments, ensure we have a healthy connection
+            if self.connection is None or not self._is_connection_healthy():
+                logger.info("Connection is None or unhealthy, recreating for REST API")
                 self._recreate_persistent_connection()
-                
-            # Check if REST interface is available, wait if needed
-            if (self.connection.rest is None or 
-                not hasattr(self.connection.rest, 'token') or 
-                self.connection.rest.token is None):
-                
-                logger.info("REST interface not immediately available, waiting for initialization...")
-                
-                # Wait for REST interface to become ready (common in K8s environments)
-                if self._wait_for_rest_interface(timeout_seconds=10):
-                    # REST interface is now available, proceed normally
+            
+            # Try to access the REST token directly (original working approach)
+            try:
+                if (self.connection.rest is not None and 
+                    hasattr(self.connection.rest, 'token') and 
+                    self.connection.rest.token is not None):
                     return {
                         "Accept": "application/json, text/event-stream",
                         "Content-Type": "application/json",
                         "Authorization": f'Snowflake Token="{self.connection.rest.token}"',
                     }
                 else:
-                    # REST interface still not available after waiting
-                    logger.warning("Connection REST interface not available after waiting")
-                    logger.info("Attempting to use alternative authentication for REST API calls")
-                    
-                    # Try to use connection parameters for basic auth if available
-                    if hasattr(self.connection, '_rest_token') and self.connection._rest_token:
-                        return {
-                            "Accept": "application/json, text/event-stream",
-                            "Content-Type": "application/json",
-                            "Authorization": f'Snowflake Token="{self.connection._rest_token}"',
-                        }
-                    
-                    # If we have username/password in connection params, we could use basic auth
-                    # But for now, raise a clear error explaining the limitation
+                    # REST interface not available - this indicates an authentication method issue
                     auth_method = self.connection_params.get('authenticator', 'snowflake')
                     raise Exception(
-                        f"REST API authentication not available with authenticator '{auth_method}'. "
-                        f"This may be due to timing issues in K8s environment. "
-                        f"Current connection does not provide REST token access after waiting."
+                        f"REST API interface not available with authenticator '{auth_method}'. "
+                        f"This authentication method may not support REST API access. "
+                        f"Consider using 'oauth' authentication for full REST API support."
                     )
-                
-            return {
-                "Accept": "application/json, text/event-stream",
-                "Content-Type": "application/json",
-                "Authorization": f'Snowflake Token="{self.connection.rest.token}"',
-            }
+            except Exception as e:
+                logger.error(f"Error accessing REST token: {e}")
+                raise
 
     def get_api_host(self) -> str:
         """
@@ -289,40 +267,6 @@ class SnowflakeService:
             )
         else:
             return self.connection.host
-
-    def _wait_for_rest_interface(self, timeout_seconds: int = 10) -> bool:
-        """
-        Wait for the REST interface to become available on the connection.
-        
-        In some environments (especially K8s), the REST interface may not be
-        immediately available after connection creation.
-        
-        Parameters
-        ----------
-        timeout_seconds : int
-            Maximum time to wait for REST interface
-            
-        Returns
-        -------
-        bool
-            True if REST interface becomes available, False if timeout
-        """
-        import time
-        
-        start_time = time.time()
-        while time.time() - start_time < timeout_seconds:
-            if (self.connection and 
-                self.connection.rest is not None and 
-                hasattr(self.connection.rest, 'token') and 
-                self.connection.rest.token is not None):
-                logger.info("REST interface is now available")
-                return True
-            
-            logger.debug("Waiting for REST interface to become available...")
-            time.sleep(0.5)  # Wait 500ms between checks
-            
-        logger.warning(f"REST interface did not become available within {timeout_seconds} seconds")
-        return False
 
     @staticmethod
     def send_initial_query(connection: Any) -> None:
@@ -420,14 +364,6 @@ class SnowflakeService:
             with self.connection.cursor() as cur:
                 cur.execute("SELECT 1")
                 cur.fetchone()
-                
-            # For external environments, also check REST token availability
-            if not self._is_spcs_container:
-                if (self.connection.rest is None or 
-                    not hasattr(self.connection.rest, 'token') or 
-                    self.connection.rest.token is None):
-                    logger.warning("Connection REST token not available")
-                    return False
                     
             return True
         except Exception as e:
