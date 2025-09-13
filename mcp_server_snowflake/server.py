@@ -49,6 +49,10 @@ tag_major_version = 1
 tag_minor_version = 1
 query_tag = {"origin": "sf_sit", "name": "mcp_server"}
 
+# Server version for tracking deployments
+SERVER_VERSION = "1.2.1-connection-fix"
+BUILD_DATE = "2025-09-12"
+
 logger = logging.getLogger(server_name)
 
 
@@ -584,8 +588,36 @@ def initialize_resources(snowflake_service: SnowflakeService, server: FastMCP):
         return json.loads(tools_config)
 
 
+def get_version() -> dict:
+    """
+    Get the current server version and build information.
+    
+    Returns
+    -------
+    dict
+        Dictionary containing version, build date, and server information
+    """
+    return {
+        "server_name": server_name,
+        "version": SERVER_VERSION,
+        "build_date": BUILD_DATE,
+        "tag_major_version": tag_major_version,
+        "tag_minor_version": tag_minor_version,
+        "query_tag": query_tag
+    }
+
+
 def initialize_tools(snowflake_service: SnowflakeService, server: FastMCP):
     if snowflake_service is not None:
+        # Add version tool (always available)
+        server.add_tool(
+            Tool.from_function(
+                fn=get_version,
+                name="get_version",
+                description="Get the current server version and build information"
+            )
+        )
+        
         # Add tools for object manager
         if snowflake_service.object_manager:
             initialize_object_manager_tools(server, snowflake_service)
