@@ -1,22 +1,35 @@
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim AS builder
 
 WORKDIR /app
 
-ENV UV_COMPILE_BYTECODE=1
+# Install git to clone the repository
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
+# Clone the snowflake-mcp repository with configurable parameters
+ARG SNOWFLAKE_MCP_REPO=https://github.com/obot-platform/snowflake-mcp.git
+ARG SNOWFLAKE_MCP_COMMIT=main
+RUN git clone ${SNOWFLAKE_MCP_REPO} . && \
+    git checkout ${SNOWFLAKE_MCP_COMMIT}
+
+ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
+# Install dependencies (without --locked to allow security patches)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --no-dev
+    uv sync --no-dev
 
-COPY . /app
+FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim AS runner
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev
+WORKDIR /app
+
+# Copy the virtual environment and application code from builder
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/mcp_server_snowflake /app/mcp_server_snowflake
+COPY --from=builder /app/pyproject.toml /app/pyproject.toml
 
 ENV PATH="/app/.venv/bin:$PATH"
+
+EXPOSE 9000
 
 # CMD ["mcp-server-snowflake", "--transport", "streamable-http"]
 CMD ["mcp-server-snowflake"]
