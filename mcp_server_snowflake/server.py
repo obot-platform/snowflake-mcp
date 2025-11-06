@@ -54,6 +54,69 @@ query_tag = {"origin": "sf_sit", "name": "mcp_server"}
 
 logger = get_logger(server_name)
 
+DEFAULT_SERVICE_CONFIG = """
+other_services: # Set desired tool groups to True to enable tools for that group
+  object_manager: True # Perform basic operations against Snowflake's most common objects such as creation, dropping, updating, and more.
+  query_manager: True # Run LLM-generated SQL managed by user-configured permissions.
+  semantic_manager: True # Discover and query Snowflake Semantic Views and their components.
+sql_statement_permissions: # List SQL statements to explicitly allow (True) or disallow (False).
+  # - All: True # To allow everything, uncomment and set All: True.
+  - Alter: True
+  - Command: True
+  - Comment: True
+  - Commit: True
+  - Create: True
+  - Delete: True
+  - Describe: True
+  - Drop: True
+  - Insert: True
+  - Merge: True
+  - Rollback: True
+  - Select: True
+  - Transaction: True
+  - TruncateTable: True
+  # - Unknown: True # To allow unknown or unmapped statement types, uncomment and set Unknown: True.
+  - Update: True
+  - Use: True
+"""
+SERVICE_CONFIG_YAML = os.getenv("SERVICE_CONFIG_YAML")
+if SERVICE_CONFIG_YAML is None:
+    with open("/tmp/snowflake_tools_config.yaml", "w") as file:
+        file.write(DEFAULT_SERVICE_CONFIG)
+    SERVICE_CONFIG_YAML = "/tmp/snowflake_tools_config.yaml"
+
+
+DEFAULT_SERVICE_CONFIG = """
+other_services: # Set desired tool groups to True to enable tools for that group
+  object_manager: True # Perform basic operations against Snowflake's most common objects such as creation, dropping, updating, and more.
+  query_manager: True # Run LLM-generated SQL managed by user-configured permissions.
+  semantic_manager: True # Discover and query Snowflake Semantic Views and their components.
+sql_statement_permissions: # List SQL statements to explicitly allow (True) or disallow (False).
+  # - All: True # To allow everything, uncomment and set All: True.
+  - Alter: True
+  - Command: True
+  - Comment: True
+  - Commit: True
+  - Create: True
+  - Delete: True
+  - Describe: True
+  - Drop: True
+  - Insert: True
+  - Merge: True
+  - Rollback: True
+  - Select: True
+  - Transaction: True
+  - TruncateTable: True
+  # - Unknown: True # To allow unknown or unmapped statement types, uncomment and set Unknown: True.
+  - Update: True
+  - Use: True
+"""
+SERVICE_CONFIG_YAML = os.getenv("SERVICE_CONFIG_YAML")
+if SERVICE_CONFIG_YAML is None:
+    with open("/tmp/snowflake_tools_config.yaml", "w") as file:
+        file.write(DEFAULT_SERVICE_CONFIG)
+    SERVICE_CONFIG_YAML = "/tmp/snowflake_tools_config.yaml"
+
 
 class SnowflakeService:
     """
@@ -108,11 +171,7 @@ class SnowflakeService:
         connection_params: dict,
         endpoint: str = "/mcp",
     ):
-        if service_config_file is None:
-            raise ValueError(
-                "service_config_file cannot be None. Please provide a path to the service configuration file."
-            )
-
+        service_config_file = SERVICE_CONFIG_YAML
         self.service_config_file = str(Path(service_config_file).expanduser().resolve())
         self.config_path_uri = Path(self.service_config_file).as_uri()
         self.transport = cast(
@@ -204,12 +263,22 @@ class SnowflakeService:
                 "Accept": "application/json, text/event-stream",
             }
         else:
-            # For external environments, we need to use the connection token
-            return {
-                "Accept": "application/json, text/event-stream",
-                "Content-Type": "application/json",
-                "Authorization": f'Snowflake Token="{self.connection.rest.token}"',
-            }
+            # For external environments, ensure we have a healthy connection
+            if self.connection is None or not self._is_connection_healthy():
+                logger.info("Connection is None or unhealthy, recreating for REST API")
+                self._recreate_persistent_connection()
+            
+            # Access the REST token with basic null-safety check
+            if (self.connection.rest is not None and 
+                hasattr(self.connection.rest, 'token') and 
+                self.connection.rest.token is not None):
+                return {
+                    "Accept": "application/json, text/event-stream",
+                    "Content-Type": "application/json",
+                    "Authorization": f'Snowflake Token="{self.connection.rest.token}"',
+                }
+            else:
+                raise Exception("REST API interface not available - connection may not support REST API access")
 
     def get_api_host(self) -> str:
         """
@@ -305,6 +374,50 @@ class SnowflakeService:
                 return connection
         except Exception as e:
             logger.error(f"Error establishing persistent Snowflake connection: {e}")
+            raise
+
+    def _is_connection_healthy(self) -> bool:
+        """
+        Check if the current connection is healthy and can execute queries.
+        
+        Returns
+        -------
+        bool
+            True if connection is healthy, False otherwise
+        """
+        if self.connection is None:
+            return False
+            
+        try:
+            # Test basic SQL execution
+            with self.connection.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+                    
+            return True
+        except Exception as e:
+            logger.warning(f"Connection health check failed: {e}")
+            return False
+
+    def _recreate_persistent_connection(self) -> None:
+        """
+        Recreate the persistent connection.
+        
+        This method should be called when the current connection is unhealthy
+        or has been closed unexpectedly.
+        """
+        try:
+            if self.connection:
+                try:
+                    self.connection.close()
+                except Exception:
+                    pass  # Ignore errors when closing unhealthy connection
+                    
+            logger.info("Recreating persistent connection...")
+            self.connection = self._get_persistent_connection()
+            self.root = Root(self.connection)
+        except Exception as e:
+            logger.error(f"Error recreating persistent connection: {e}")
             raise
 
     @contextmanager
