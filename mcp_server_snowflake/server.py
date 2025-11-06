@@ -86,38 +86,6 @@ if SERVICE_CONFIG_YAML is None:
     SERVICE_CONFIG_YAML = "/tmp/snowflake_tools_config.yaml"
 
 
-DEFAULT_SERVICE_CONFIG = """
-other_services: # Set desired tool groups to True to enable tools for that group
-  object_manager: True # Perform basic operations against Snowflake's most common objects such as creation, dropping, updating, and more.
-  query_manager: True # Run LLM-generated SQL managed by user-configured permissions.
-  semantic_manager: True # Discover and query Snowflake Semantic Views and their components.
-sql_statement_permissions: # List SQL statements to explicitly allow (True) or disallow (False).
-  # - All: True # To allow everything, uncomment and set All: True.
-  - Alter: True
-  - Command: True
-  - Comment: True
-  - Commit: True
-  - Create: True
-  - Delete: True
-  - Describe: True
-  - Drop: True
-  - Insert: True
-  - Merge: True
-  - Rollback: True
-  - Select: True
-  - Transaction: True
-  - TruncateTable: True
-  # - Unknown: True # To allow unknown or unmapped statement types, uncomment and set Unknown: True.
-  - Update: True
-  - Use: True
-"""
-SERVICE_CONFIG_YAML = os.getenv("SERVICE_CONFIG_YAML")
-if SERVICE_CONFIG_YAML is None:
-    with open("/tmp/snowflake_tools_config.yaml", "w") as file:
-        file.write(DEFAULT_SERVICE_CONFIG)
-    SERVICE_CONFIG_YAML = "/tmp/snowflake_tools_config.yaml"
-
-
 class SnowflakeService:
     """
     Snowflake service configuration and management.
