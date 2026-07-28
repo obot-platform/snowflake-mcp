@@ -237,18 +237,22 @@ class SnowflakeService:
             if self.connection is None or not self._is_connection_healthy():
                 logger.info("Connection is None or unhealthy, recreating for REST API")
                 self._recreate_persistent_connection()
-            
+
             # Access the REST token with basic null-safety check
-            if (self.connection.rest is not None and 
-                hasattr(self.connection.rest, 'token') and 
-                self.connection.rest.token is not None):
+            if (
+                self.connection.rest is not None
+                and hasattr(self.connection.rest, "token")
+                and self.connection.rest.token is not None
+            ):
                 return {
                     "Accept": "application/json, text/event-stream",
                     "Content-Type": "application/json",
                     "Authorization": f'Snowflake Token="{self.connection.rest.token}"',
                 }
             else:
-                raise Exception("REST API interface not available - connection may not support REST API access")
+                raise Exception(
+                    "REST API interface not available - connection may not support REST API access"
+                )
 
     def get_api_host(self) -> str:
         """
@@ -349,7 +353,7 @@ class SnowflakeService:
     def _is_connection_healthy(self) -> bool:
         """
         Check if the current connection is healthy and can execute queries.
-        
+
         Returns
         -------
         bool
@@ -357,13 +361,13 @@ class SnowflakeService:
         """
         if self.connection is None:
             return False
-            
+
         try:
             # Test basic SQL execution
             with self.connection.cursor() as cur:
                 cur.execute("SELECT 1")
                 cur.fetchone()
-                    
+
             return True
         except Exception as e:
             logger.warning(f"Connection health check failed: {e}")
@@ -372,7 +376,7 @@ class SnowflakeService:
     def _recreate_persistent_connection(self) -> None:
         """
         Recreate the persistent connection.
-        
+
         This method should be called when the current connection is unhealthy
         or has been closed unexpectedly.
         """
@@ -382,7 +386,7 @@ class SnowflakeService:
                     self.connection.close()
                 except Exception:
                     pass  # Ignore errors when closing unhealthy connection
-                    
+
             logger.info("Recreating persistent connection...")
             self.connection = self._get_persistent_connection()
             self.root = Root(self.connection)
