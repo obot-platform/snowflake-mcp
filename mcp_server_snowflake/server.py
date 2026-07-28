@@ -238,21 +238,18 @@ class SnowflakeService:
                 logger.info("Connection is None or unhealthy, recreating for REST API")
                 self._recreate_persistent_connection()
 
-            # Access the REST token with basic null-safety check
-            if (
-                self.connection.rest is not None
-                and hasattr(self.connection.rest, "token")
-                and self.connection.rest.token is not None
-            ):
+            rest = getattr(self.connection, "rest", None)
+            token = getattr(rest, "token", None)
+            if token is not None:
                 return {
                     "Accept": "application/json, text/event-stream",
                     "Content-Type": "application/json",
-                    "Authorization": f'Snowflake Token="{self.connection.rest.token}"',
+                    "Authorization": f'Snowflake Token="{token}"',
                 }
-            else:
-                raise Exception(
-                    "REST API interface not available - connection may not support REST API access"
-                )
+
+            raise RuntimeError(
+                "REST API interface not available - connection may not support REST API access"
+            )
 
     def get_api_host(self) -> str:
         """

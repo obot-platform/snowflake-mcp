@@ -14,6 +14,7 @@ import argparse
 import os
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -62,6 +63,43 @@ def mock_snowflake_connect():
         mock_connect.return_value = MagicMock()
         mock_root.return_value = MagicMock()
         yield mock_connect
+
+
+def test_get_api_headers_uses_connection_rest_token():
+    service = object.__new__(SnowflakeService)
+    service._is_spcs_container = False
+    service.connection = SimpleNamespace(
+        rest=SimpleNamespace(token="test-token"),
+    )
+
+    with patch.object(SnowflakeService, "_is_connection_healthy", return_value=True):
+        headers = service.get_api_headers()
+
+    assert headers == {
+        "Accept": "application/json, text/event-stream",
+        "Content-Type": "application/json",
+        "Authorization": 'Snowflake Token="test-token"',
+    }
+
+
+@pytest.mark.parametrize(
+    "connection",
+    [
+        SimpleNamespace(),
+        SimpleNamespace(rest=SimpleNamespace()),
+    ],
+    ids=["missing-rest", "missing-token"],
+)
+def test_get_api_headers_rejects_unavailable_rest_token(connection):
+    service = object.__new__(SnowflakeService)
+    service._is_spcs_container = False
+    service.connection = connection
+
+    with (
+        patch.object(SnowflakeService, "_is_connection_healthy", return_value=True),
+        pytest.raises(RuntimeError, match="REST API interface not available"),
+    ):
+        service.get_api_headers()
 
 
 def create_config_file(tmp_path, config, filename="config.yaml"):
