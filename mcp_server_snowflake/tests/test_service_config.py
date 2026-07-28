@@ -21,13 +21,25 @@ import yaml
 from fastmcp import FastMCP
 
 from mcp_server_snowflake.server import SnowflakeService, create_server
+from mcp_server_snowflake.utils import get_login_params
 
 
 def test_server_import_and_construction_without_credentials():
     """Constructing the server must not open a Snowflake connection."""
-    server = create_server(argparse.Namespace())
+    args = argparse.Namespace(
+        **{key: None for key in get_login_params()},
+        service_config_file=None,
+        transport="stdio",
+        server_host="0.0.0.0",
+        port=9000,
+        endpoint="/mcp",
+    )
+
+    with patch("mcp_server_snowflake.server.connect") as mock_connect:
+        server = create_server(args)
 
     assert isinstance(server, FastMCP)
+    mock_connect.assert_not_called()
 
 
 @pytest.fixture
