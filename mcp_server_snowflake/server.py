@@ -140,7 +140,8 @@ class SnowflakeService:
         endpoint: str = "/mcp",
     ):
         service_config_file = service_config_file or SERVICE_CONFIG_YAML
-        assert service_config_file is not None
+        if service_config_file is None:
+            raise RuntimeError("No service configuration file is configured")
         self.service_config_file = str(Path(service_config_file).expanduser().resolve())
         self.config_path_uri = Path(self.service_config_file).as_uri()
         self.transport = cast(
