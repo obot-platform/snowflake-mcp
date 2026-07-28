@@ -134,12 +134,13 @@ class SnowflakeService:
 
     def __init__(
         self,
-        service_config_file: str,
+        service_config_file: Optional[str],
         transport: str,
         connection_params: dict,
         endpoint: str = "/mcp",
     ):
-        service_config_file = SERVICE_CONFIG_YAML
+        service_config_file = service_config_file or SERVICE_CONFIG_YAML
+        assert service_config_file is not None
         self.service_config_file = str(Path(service_config_file).expanduser().resolve())
         self.config_path_uri = Path(self.service_config_file).as_uri()
         self.transport = cast(
@@ -676,13 +677,17 @@ def initialize_tools(snowflake_service: SnowflakeService, server: FastMCP):
             initialize_cortex_analyst_tool(server, snowflake_service)
 
 
+def create_server(args: argparse.Namespace) -> FastMCP:
+    """Construct the MCP server without starting its lifespan."""
+    return FastMCP("Snowflake MCP Server", lifespan=create_lifespan(args))
+
+
 def main():
     args = parse_arguments()
 
     warn_deprecated_params()
 
-    # Create server with lifespan that has access to args
-    server = FastMCP("Snowflake MCP Server", lifespan=create_lifespan(args))
+    server = create_server(args)
 
     try:
         logger.info("Starting Snowflake MCP Server...")

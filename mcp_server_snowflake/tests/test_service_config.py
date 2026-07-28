@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import os
 import tempfile
 from pathlib import Path
@@ -17,8 +18,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
+from fastmcp import FastMCP
 
-from mcp_server_snowflake.server import SnowflakeService
+from mcp_server_snowflake.server import SnowflakeService, create_server
+
+
+def test_server_import_and_construction_without_credentials():
+    """Constructing the server must not open a Snowflake connection."""
+    server = create_server(argparse.Namespace())
+
+    assert isinstance(server, FastMCP)
 
 
 @pytest.fixture
